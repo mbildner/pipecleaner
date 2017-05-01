@@ -1,0 +1,18 @@
+jobs:
+- name: hello-world
+  plan:
+  - task: say-hello
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source: {repository: ubuntu}
+      params:
+        VERY_SECRET_KEY: ((Fake Concourse Credentials/Notes/description))
+      run:
+        path: sh
+        args:
+        - -exc
+        - |
+          echo "${VERY_SECRET_KEY}"
+

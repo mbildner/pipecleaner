@@ -2,11 +2,12 @@ require 'yaml'
 require 'json'
 
 class PipelineScanner
-  def initialize(pipeline_name, pipeline_path, fly_target, concourse)
+  def initialize(pipeline_name, pipeline_path, fly_target, concourse, lpass)
     @pipeline_name = pipeline_name
     @pipeline_path = pipeline_path
     @fly_target = fly_target
     @concourse = concourse
+    @lpass = lpass
   end
 
   def scan_for_leaks
@@ -32,14 +33,14 @@ class PipelineScanner
 
   private
 
-  attr_reader :pipeline_name, :pipeline_path, :fly_target, :concourse
+  attr_reader :pipeline_name, :pipeline_path, :fly_target, :concourse, :lpass
 
   def lpass_notes
     File.read(pipeline_path)
         .scan(/\({2}(.+)\){2}/)
         .map(&:first)
         .map {|full_note_path| full_note_path.split('/Notes/')[0]}
-        .map {|note_name| {name: note_name, note: YAML.safe_load(`lpass show --notes "#{note_name}"`)}}
+        .map {|note_name| {name: note_name, note: lpass.note(note_name)}}
   end
 
   def logs_for_build(job_name, run_id)
@@ -64,7 +65,11 @@ class PipelineScanner
 end
 
 class LpassWrapper
+  def initialize; end
 
+  def note(name)
+    YAML.safe_load(`lpass show --notes "#{name}"`)
+  end
 end
 
 class ConcourseWrapper
@@ -102,5 +107,6 @@ pipeline_path = 'pipeline.yml'
 fly_target = 'pipeline-bling'
 
 concourse = ConcourseWrapper.new(pipeline_name, fly_target)
+lpass = LpassWrapper.new
 
-puts PipelineScanner.new(pipeline_name, pipeline_path, fly_target, concourse).scan_for_leaks.to_json
+puts PipelineScanner.new(pipeline_name, pipeline_path, fly_target, concourse, lpass).scan_for_leaks.to_json

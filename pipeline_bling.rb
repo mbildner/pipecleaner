@@ -11,11 +11,10 @@ class PipelineScanner
   end
 
   def scan_for_leaks
-    notes = lpass_notes
     jobs.map do |job_name|
       build_id = concourse.last_successful_build(job_name)
       log = concourse.logs(job_name, build_id)
-      notes.map do |note|
+      lpass_notes.map do |note|
         note[:note].map do |k, v|
           if log.include?(v)
             {
@@ -36,7 +35,7 @@ class PipelineScanner
   attr_reader :pipeline_name, :pipeline_path, :concourse, :lpass, :secrets_parser
 
   def lpass_notes
-    secrets_parser.parse(File.read(pipeline_path))
+    @_lpass_notes ||= secrets_parser.parse(File.read(pipeline_path))
         .map {|note_name| {name: note_name, note: lpass.note(note_name)}}
   end
 
@@ -103,4 +102,10 @@ concourse = ConcourseWrapper.new(pipeline_name, fly_target)
 lpass = LpassWrapper.new
 secrets_parser = PipelineSecretParser.new
 
-puts PipelineScanner.new(pipeline_name, pipeline_path, concourse, lpass, secrets_parser).scan_for_leaks.to_json
+puts PipelineScanner.new(
+    pipeline_name,
+    pipeline_path,
+    concourse,
+    lpass,
+    secrets_parser
+).scan_for_leaks.to_json

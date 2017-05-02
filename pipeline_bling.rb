@@ -14,15 +14,15 @@ class PipelineScanner
   def scan_for_leaks
     notes = lpass_notes
     jobs.map do |job_name|
-      run_id = last_successful_build(job_name)
-      log = logs_for_build(job_name, run_id)
+      build_id = concourse.last_successful_build(job_name)
+      log = concourse.logs(job_name, build_id)
       notes.map do |note|
         note[:note].map do |k, v|
           if log.include?(v)
             {
                 pipeline: pipeline_name,
                 job: job_name,
-                build: run_id,
+                build: build_id,
                 key: k,
                 note: note[:name]
             }
@@ -41,25 +41,10 @@ class PipelineScanner
         .map {|note_name| {name: note_name, note: lpass.note(note_name)}}
   end
 
-  def logs_for_build(job_name, run_id)
-    concourse.logs(job_name, run_id)
-  end
-
   def jobs
-    pipeline(pipeline_name).fetch('jobs').map {|job| job['name']}
+    concourse.pipeline(pipeline_name).fetch('jobs').map {|job| job['name']}
   end
 
-  def pipeline(name)
-    concourse.pipeline(name)
-  end
-
-  def last_successful_build(job_name)
-    concourse.last_successful_build(job_name)
-  end
-
-  def builds(job_name)
-    concourse.builds(job_name)
-  end
 end
 
 class PipelineSecretParser

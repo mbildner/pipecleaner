@@ -2,12 +2,13 @@ require 'yaml'
 require 'json'
 
 class PipelineScanner
-  def initialize(pipeline_name, pipeline_path, fly_target, concourse, lpass)
+  def initialize(pipeline_name, pipeline_path, fly_target, concourse, lpass, secrets_parser)
     @pipeline_name = pipeline_name
     @pipeline_path = pipeline_path
     @fly_target = fly_target
     @concourse = concourse
     @lpass = lpass
+    @secrets_parser = secrets_parser
   end
 
   def scan_for_leaks
@@ -33,13 +34,10 @@ class PipelineScanner
 
   private
 
-  attr_reader :pipeline_name, :pipeline_path, :fly_target, :concourse, :lpass
+  attr_reader :pipeline_name, :pipeline_path, :fly_target, :concourse, :lpass, :secrets_parser
 
   def lpass_notes
-    File.read(pipeline_path)
-        .scan(/\({2}(.+)\){2}/)
-        .map(&:first)
-        .map {|full_note_path| full_note_path.split('/Notes/')[0]}
+    secrets_parser.parse(File.read(pipeline_path))
         .map {|note_name| {name: note_name, note: lpass.note(note_name)}}
   end
 
@@ -64,8 +62,19 @@ class PipelineScanner
   end
 end
 
-class LpassWrapper
+class PipelineSecretParser
   def initialize; end
+
+  def parse(definition_text)
+    definition_text.scan(/\({2}(.+)\){2}/)
+        .map(&:first)
+        .map {|full_note_path| full_note_path.split('/Notes/')[0]}
+  end
+end
+
+class LpassWrapper
+  def initialize;
+  end
 
   def note(name)
     YAML.safe_load(`lpass show --notes "#{name}"`)
@@ -108,5 +117,6 @@ fly_target = 'pipeline-bling'
 
 concourse = ConcourseWrapper.new(pipeline_name, fly_target)
 lpass = LpassWrapper.new
+secrets_parser = PipelineSecretParser.new
 
-puts PipelineScanner.new(pipeline_name, pipeline_path, fly_target, concourse, lpass).scan_for_leaks.to_json
+puts PipelineScanner.new(pipeline_name, pipeline_path, fly_target, concourse, lpass, secrets_parser).scan_for_leaks.to_json

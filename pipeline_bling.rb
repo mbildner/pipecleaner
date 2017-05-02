@@ -2,10 +2,9 @@ require 'yaml'
 require 'json'
 
 class PipelineScanner
-  def initialize(pipeline_name, pipeline_path, fly_target, concourse, lpass, secrets_parser)
+  def initialize(pipeline_name, pipeline_path, concourse, lpass, secrets_parser)
     @pipeline_name = pipeline_name
     @pipeline_path = pipeline_path
-    @fly_target = fly_target
     @concourse = concourse
     @lpass = lpass
     @secrets_parser = secrets_parser
@@ -34,7 +33,7 @@ class PipelineScanner
 
   private
 
-  attr_reader :pipeline_name, :pipeline_path, :fly_target, :concourse, :lpass, :secrets_parser
+  attr_reader :pipeline_name, :pipeline_path, :concourse, :lpass, :secrets_parser
 
   def lpass_notes
     secrets_parser.parse(File.read(pipeline_path))
@@ -104,4 +103,4 @@ concourse = ConcourseWrapper.new(pipeline_name, fly_target)
 lpass = LpassWrapper.new
 secrets_parser = PipelineSecretParser.new
 
-puts PipelineScanner.new(pipeline_name, pipeline_path, fly_target, concourse, lpass, secrets_parser).scan_for_leaks.to_json
+puts PipelineScanner.new(pipeline_name, pipeline_path, concourse, lpass, secrets_parser).scan_for_leaks.to_json

@@ -2,16 +2,17 @@ require 'yaml'
 require 'json'
 
 class PipelineScanner
-  def initialize(pipeline_name, pipeline_path, fly_target)
+  def initialize(pipeline_name, pipeline_path, fly_target, concourse)
     @pipeline_name = pipeline_name
     @pipeline_path = pipeline_path
     @fly_target = fly_target
+    @concourse = concourse
   end
 
   def scan_for_leaks
     notes = lpass_notes
     jobs.map do |job_name|
-      run_id = last_successful_run(job_name)
+      run_id = last_successful_build(job_name)
       log = logs_for_build(job_name, run_id)
       notes.map do |note|
         note[:note].map do |k, v|
@@ -31,44 +32,75 @@ class PipelineScanner
 
   private
 
-  attr_reader :pipeline_name, :pipeline_path, :fly_target
-
-  def pipelines
-    `fly -t #{fly_target} pipelines --all`.split("\n").map {|l| l.split(/\s/)[0]}
-  end
+  attr_reader :pipeline_name, :pipeline_path, :fly_target, :concourse
 
   def lpass_notes
     File.read(pipeline_path)
         .scan(/\({2}(.+)\){2}/)
         .map(&:first)
         .map {|full_note_path| full_note_path.split('/Notes/')[0]}
-        .map {|note_name| { name: note_name, note: YAML.safe_load(`lpass show --notes "#{note_name}"`)}}
+        .map {|note_name| {name: note_name, note: YAML.safe_load(`lpass show --notes "#{note_name}"`)}}
+  end
+
+  def logs_for_build(job_name, run_id)
+    concourse.logs(job_name, run_id)
   end
 
   def jobs
-    pipeline(pipeline_name).fetch('jobs').map { |job| job['name'] }
+    pipeline(pipeline_name).fetch('jobs').map {|job| job['name']}
+  end
+
+  def pipeline(name)
+    concourse.pipeline(name)
+  end
+
+  def last_successful_build(job_name)
+    concourse.last_successful_build(job_name)
+  end
+
+  def builds(job_name)
+    concourse.builds(job_name)
+  end
+end
+
+class LpassWrapper
+
+end
+
+class ConcourseWrapper
+  def initialize(pipeline_name, fly_target)
+    @pipeline_name = pipeline_name
+    @fly_target = fly_target
   end
 
   def pipeline(name)
     YAML.safe_load(`fly -t #{fly_target} get-pipeline -p #{name}`)
   end
 
-  def last_successful_run(job_name)
-    builds(job_name).find {|job| job.split(/\s+/)[3] == 'succeeded'}[/\d+/].to_i
-  end
-
   def builds(job_name)
     `fly -t #{fly_target} builds -j #{pipeline_name}/#{job_name}`.split("\n")
   end
 
-  def logs_for_build(job_name, build)
-    `fly -t #{fly_target} watch -j #{pipeline_name}/#{job_name} -b #{build}`
+  def logs(job, build_number)
+    `fly -t #{fly_target} watch -j #{pipeline_name}/#{job} -b #{build_number}`
   end
+
+  def last_successful_build(job_name)
+    builds(job_name).find do |job|
+      job.split(/\s+/)[3] == 'succeeded'
+    end[/\d+/].to_i
+  end
+
+  private
+
+  attr_reader :pipeline_name, :fly_target
 end
+
 
 pipeline_name = 'hello-world'
 pipeline_path = 'pipeline.yml'
 fly_target = 'pipeline-bling'
 
+concourse = ConcourseWrapper.new(pipeline_name, fly_target)
 
-puts PipelineScanner.new(pipeline_name, pipeline_path, fly_target).scan_for_leaks.to_json
+puts PipelineScanner.new(pipeline_name, pipeline_path, fly_target, concourse).scan_for_leaks.to_json
